@@ -14,15 +14,15 @@ import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 
 
-DEFAULT_ENV_NAME = 'ALE/Pong-v5'
+DEFAULT_ENV_NAME = 'PongNoFrameskip-v4'
 MEAN_REWARD_BOUND = 19.0
 
 GAMMA = 0.99
-BATCH_SIZE = 128
-REPLAY_SIZE = 10000
+BATCH_SIZE = 32
+REPLAY_SIZE = 100000
 REPLAY_START_SIZE = 10000
 LEARNING_RATE = 1e-4
-SYNC_TARGET_FRAMES = 1000
+SYNC_TARGET_FRAMES = 5000
 
 EPSILON_DECAY_LAST_FRAME = 150000
 EPSILON_START = 1.0
@@ -30,7 +30,8 @@ EPSILON_FINAL = 0.01
 
 
 Experience = collections.namedtuple(
-    'Experience', field_names=['state', 'action', 'reward', 'done', 'new_state']
+    'Experience',
+    field_names=['state', 'action', 'reward', 'terminated', 'truncated', 'new_state']
 )
 
 
@@ -43,12 +44,18 @@ class ExperienceBuffer:
     
     def append(self, experience):
         self.buffer.append(experience)
-    
+
     def sample(self, batch_size):
         indices = np.random.choice(len(self.buffer), batch_size, replace=False)
-        states, actions, rewards, dones, next_states = zip(*[self.buffer[idx] for idx in indices])
-        return (np.array(states), np.array(actions), np.array(rewards, dtype=np.float32),
-                np.array(dones, np.uint8), np.array(next_states))
+        states, actions, rewards, terminated, truncated, next_states = zip(*[self.buffer[idx] for idx in indices])
+        return (
+            np.array(states),
+            np.array(actions),
+            np.array(rewards, dtype=np.float32),
+            np.array(terminated, dtype=np.uint8),
+            np.array(truncated, dtype=np.uint8),
+            np.array(next_states)
+        )
 
 
 class Agent:
@@ -77,7 +84,14 @@ class Agent:
         new_state, reward, terminated, truncated, info = self.env.step(action)
         self.total_reward += reward
 
-        exp = Experience(self.state, action, reward, terminated or truncated, new_state)
+        exp = Experience(
+            self.state,
+            action,
+            reward,
+            terminated,  # Добавлено
+            truncated,  # Добавлено
+            new_state
+        )
         self.exp_buffer.append(exp)
         self.state = new_state
         if terminated or truncated:
@@ -86,19 +100,22 @@ class Agent:
         return done_reward
 
     def calc_loss(self, batch, net, tgt_net, device='cpu'):
-        states, actions, rewards, dones, next_states = batch
-        states_v = torch.as_tensor(np.array(states)).to(device)
-        next_states_v = torch.as_tensor(np.array(next_states)).to(device)
+        states, actions, rewards, terminated, truncated, next_states = batch  # 6 элементов!
+
+        states_v = torch.as_tensor(states).to(device)
+        next_states_v = torch.as_tensor(next_states).to(device)
         actions_v = torch.as_tensor(actions).to(device)
         rewards_v = torch.as_tensor(rewards).to(device)
-        done_mask = torch.BoolTensor(dones).to(device)
-        state_action_values = net(states_v).gather(1, actions_v.unsqueeze(-1)).squeeze(-1)
-        next_state_values = tgt_net(next_states_v).max(1)[0]
-        next_state_values[done_mask] = 0.0
-        next_state_values = next_state_values.detach()
+        done_terminated = torch.BoolTensor(terminated).to(device)
 
-        expected_state_action_values = next_state_values * GAMMA + rewards_v
-        return nn.SmoothL1Loss()(state_action_values, expected_state_action_values)
+        state_action_values = net(states_v).gather(1, actions_v.unsqueeze(-1)).squeeze(-1)
+
+        with torch.no_grad():
+            next_state_values = tgt_net(next_states_v).max(1)[0]
+            next_state_values[done_terminated] = 0.0  # Обнуляем только для terminated
+
+        expected_state_action_values = rewards_v + GAMMA * next_state_values
+        return nn.MSELoss()(state_action_values, expected_state_action_values)
 
 
 if __name__ == '__main__':
@@ -110,6 +127,7 @@ if __name__ == '__main__':
     device = torch.device('mps' if args.mps else 'cpu')
 
     env = wrappers.make_env(args.env)
+    print("Final observation space:", env.observation_space.shape)
     net = dqn_model.DQN(env.observation_space.shape, env.action_space.n).to(device)
     tgt_net = dqn_model.DQN(env.observation_space.shape, env.action_space.n).to(device)
 
@@ -120,7 +138,7 @@ if __name__ == '__main__':
     agent = Agent(env, buffer)
     epsilon = EPSILON_START
 
-    optimizer = optim.RMSprop(net.parameters(), lr=LEARNING_RATE, eps=1e-4)
+    optimizer = optim.Adam(net.parameters(), lr=LEARNING_RATE)
     total_rewards = []
     frame_idx = 0
     ts_frame = 0
@@ -162,4 +180,9 @@ if __name__ == '__main__':
         batch = buffer.sample(BATCH_SIZE)
         loss_t = agent.calc_loss(batch, net, tgt_net, device=device)
         loss_t.backward()
+        # main.py (после loss_t.backward())
+        nn.utils.clip_grad_norm_(net.parameters(), max_norm=10.0)
         optimizer.step()
+
+        if frame_idx % 1000 == 0:
+            torch.mps.empty_cache()

@@ -6,9 +6,11 @@ import numpy as np
 class DQN(nn.Module):
     def __init__(self, input_shape, n_actions):
         super().__init__()
+        assert input_shape[0] == 4, f"Expected 4 input channels, got {input_shape[0]}"
 
         self.conv = nn.Sequential(
             nn.Conv2d(input_shape[0], 32, kernel_size=8, stride=4),
+            nn.BatchNorm2d(32),
             nn.ReLU(),
             nn.Conv2d(32, 64, kernel_size=4, stride=2),
             nn.ReLU(),
