@@ -22,9 +22,9 @@ REPLAY_START_SIZE = 10000
 LEARNING_RATE = 1e-4
 SYNC_TARGET_FRAMES = 1000
 
-EPSILON_DECAY = 150000
+EPSILON_DECAY_LAST_FRAME = 150000
 EPSILON_START = 1.0
-EPSILON_END = 0.01
+EPSILON_FINAL = 0.01
 
 
 Experience = collections.namedtuple(
@@ -91,4 +91,72 @@ class Agent:
         rewards_v = torch.tensor(rewards).to(device)
         done_mask = torch.BoolTensor(dones).to(device)
         state_action_values = net(states_v).gather(1, actions_v.unsqueeze(-1)).squeeze(-1)
+        next_state_values = tgt_net(next_states_v).max(1)[0]
+        next_state_values[done_mask] = 0.0
+        next_state_values = next_state_values.detach()
 
+        expected_state_action_values = next_state_values * GAMMA + rewards_v
+        return nn.MSELoss()(state_action_values, expected_state_action_values)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--mps', default=False, action='store_true', help='Enable mps')
+    parser.add_argument('--env', default=DEFAULT_ENV_NAME,
+                        help='Name of the environment, default=' + DEFAULT_ENV_NAME)
+    args = parser.parse_args()
+    device = torch.device('mps' if args.mps else 'cpu')
+
+    env = wrappers.make_env(args.env)
+    net = dqn_model.DQN(env.observation_space.shape, env.action_space.n).to(device)
+    tgt_net = dqn_model.DQN(env.observation_space.shape, env.action_space.n).to(device)
+
+    writer = SummaryWriter(comment='-' + args.env)
+    print(net)
+
+    buffer = ExperienceBuffer(REPLAY_SIZE)
+    agent = Agent(env, buffer)
+    epsilon = EPSILON_START
+
+    optimizer = optim.Adam(net.parameters(), lr=LEARNING_RATE)
+    total_rewards = []
+    frame_idx = 0
+    ts_frame = 0
+    ts = time.time()
+    best_m_reward = None
+
+    while True:
+        frame_idx += 1
+        epsilon = max(EPSILON_FINAL, EPSILON_START - frame_idx / EPSILON_DECAY_LAST_FRAME)
+
+        reward = agent.play_step(net, epsilon, device=device)
+        if reward is not None:
+            total_rewards.append(reward)
+            speed = (frame_idx - ts_frame) / (time.time() - ts)
+            m_reward = np.mean(total_rewards[-100:])
+            print(f'{frame_idx}: done {len(total_rewards)} games, reward {m_reward}, eps {epsilon}, speed {speed}')
+            writer.add_scalar('epsilon', epsilon, frame_idx)
+            writer.add_scalar('speed', speed, frame_idx)
+            writer.add_scalar('reward_100', m_reward, frame_idx)
+            writer.add_scalar('reward', reward, frame_idx)
+
+            if best_m_reward is None or best_m_reward < m_reward:
+                torch.save(net.state_dict(), args.env + '-best_%.0f.dat' % m_reward)
+                if best_m_reward is not None:
+                    print('Best reward updated %.3f -> %.3f' % (best_m_reward, m_reward))
+                best_m_reward = m_reward
+            if m_reward > MEAN_REWARD_BOUND:
+                print(f'Solved in {frame_idx} frames!')
+                break
+
+        if len(buffer) < REPLAY_START_SIZE:
+            continue
+
+        if frame_idx % SYNC_TARGET_FRAMES == 0:
+            tgt_net.load_state_dict(net.state_dict())
+
+        optimizer.zero_grad()
+        batch = buffer.sample(BATCH_SIZE)
+        loss_t = agent.calc_loss(batch, net, tgt_net, device=device)
+        loss_t.backward()
+        optimizer.step()
