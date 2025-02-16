@@ -22,7 +22,7 @@ BATCH_SIZE = 32
 REPLAY_SIZE = 10000
 REPLAY_START_SIZE = 10000
 LEARNING_RATE = 1e-4
-SYNC_TARGET_FRAMES = 1000
+SYNC_TARGET_FRAMES = 10000
 
 EPSILON_DECAY_LAST_FRAME = 150000
 EPSILON_START = 1.0
@@ -87,10 +87,10 @@ class Agent:
 
     def calc_loss(self, batch, net, tgt_net, device='cpu'):
         states, actions, rewards, dones, next_states = batch
-        states_v = torch.tensor(np.array(states, copy=False)).to(device)
-        next_states_v = torch.tensor(np.array(next_states, copy=False)).to(device)
-        actions_v = torch.tensor(actions).to(device)
-        rewards_v = torch.tensor(rewards).to(device)
+        states_v = torch.as_tensor(np.array(states)).to(device)
+        next_states_v = torch.as_tensor(np.array(next_states)).to(device)
+        actions_v = torch.as_tensor(actions).to(device)
+        rewards_v = torch.as_tensor(rewards).to(device)
         done_mask = torch.BoolTensor(dones).to(device)
         state_action_values = net(states_v).gather(1, actions_v.unsqueeze(-1)).squeeze(-1)
         next_state_values = tgt_net(next_states_v).max(1)[0]
