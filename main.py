@@ -5,6 +5,7 @@ import time
 import numpy as np
 import collections
 import ale_py
+import os
 
 import torch
 import torch.nn as nn
@@ -13,7 +14,7 @@ import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 
 
-DEFAULT_ENV_NAME = 'ALE/PongNoFrameskip-v5'
+DEFAULT_ENV_NAME = 'ALE/Pong-v5'
 MEAN_REWARD_BOUND = 19.0
 
 GAMMA = 0.99
@@ -67,7 +68,7 @@ class Agent:
         if np.random.random() < epsilon:
             action = self.env.action_space.sample()
         else:
-            state_a = np.array([self.state], copy=False)
+            state_a = np.array([self.state])
             state_v = torch.tensor(state_a).to(device)
             q_vals_v = net(state_v)
             _, act_v = torch.max(q_vals_v, dim=1)
@@ -142,7 +143,8 @@ if __name__ == '__main__':
             writer.add_scalar('reward', reward, frame_idx)
 
             if best_m_reward is None or best_m_reward < m_reward:
-                torch.save(net.state_dict(), args.env + '-best_%.0f.dat' % m_reward)
+                env_name = os.path.basename(args.env)  # Extract the base name
+                torch.save(net.state_dict(), env_name + '-best_%.0f.dat' % m_reward)
                 if best_m_reward is not None:
                     print('Best reward updated %.3f -> %.3f' % (best_m_reward, m_reward))
                 best_m_reward = m_reward
