@@ -14,7 +14,7 @@ import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 
 
-DEFAULT_ENV_NAME = 'ALE/Pong-v5'
+DEFAULT_ENV_NAME = 'PongNoFrameskip-v4'
 MEAN_REWARD_BOUND = 19.0
 
 GAMMA = 0.99
@@ -87,8 +87,8 @@ class Agent:
 
     def calc_loss(self, batch, net, tgt_net, device='cpu'):
         states, actions, rewards, dones, next_states = batch
-        states_v = torch.tensor(np.array(states)).to(device)
-        next_states_v = torch.tensor(np.array(next_states)).to(device)
+        states_v = torch.tensor(np.array(states, copy=False)).to(device)
+        next_states_v = torch.tensor(np.array(next_states, copy=False)).to(device)
         actions_v = torch.tensor(actions).to(device)
         rewards_v = torch.tensor(rewards).to(device)
         done_mask = torch.BoolTensor(dones).to(device)
