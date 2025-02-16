@@ -52,9 +52,10 @@ OP’s TODO list:
 ---
 
 ### **Shoutouts**  
+- **[The Book: DRL Hands-On 2nd Ed.](https://github.com/PacktPublishing/Deep-Reinforcement-Learning-Hands-On-Second-Edition)**: For the code I butchered.
 - **DeepSeek-R1**: Wrote this README and fixed OP’s code.  
 - **Apple Silicon**: For not melting during 3-hour training sessions.  
-- **OpenAI**: For making ChatGPT apologize when OP asked how to bypass `gymnasium` errors.  
+- **OpenAI**: For making ChatGPT apologize when OP asked how to bypass `gymnasium` errors.
 
 ---
 
