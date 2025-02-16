@@ -4,6 +4,7 @@ import argparse
 import time
 import numpy as np
 import collections
+import ale_py
 
 import torch
 import torch.nn as nn
