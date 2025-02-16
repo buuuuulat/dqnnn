@@ -87,8 +87,8 @@ class Agent:
 
     def calc_loss(self, batch, net, tgt_net, device='cpu'):
         states, actions, rewards, dones, next_states = batch
-        states_v = torch.tensor(np.array(states, copy=False)).to(device)
-        next_states_v = torch.tensor(np.array(next_states, copy=False)).to(device)
+        states_v = torch.tensor(np.array(states)).to(device)
+        next_states_v = torch.tensor(np.array(next_states)).to(device)
         actions_v = torch.tensor(actions).to(device)
         rewards_v = torch.tensor(rewards).to(device)
         done_mask = torch.BoolTensor(dones).to(device)
