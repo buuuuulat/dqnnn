@@ -31,11 +31,12 @@ class MaxAndSkipEnv(gym.Wrapper):
 
     def step(self, action):
         total_reward = 0.0
-        done = None
+        done = False
         for _ in range(self._skip):
             obs, reward, terminated, truncated, info = self.env.step(action)
             total_reward += reward
             self._obs_buffer.append(obs)
+            done = terminated or truncated
             if done:
                 break
         max_frame = np.max(np.stack(self._obs_buffer), axis=0)
@@ -50,7 +51,7 @@ class MaxAndSkipEnv(gym.Wrapper):
 
 class ProcessFrame84(gym.ObservationWrapper):
     def __init__(self, env=None):
-        super.__init__(env)
+        super().__init__(env)
         self.observation_space = gym.spaces.Box(low=0, high=255, shape=(84, 84, 1), dtype=np.uint8)
 
     def observation(self, obs):
@@ -74,7 +75,7 @@ class ProcessFrame84(gym.ObservationWrapper):
 
 class BufferWrapper(gym.ObservationWrapper):
     def __init__(self, env, n_steps, dtype=np.float32):
-        super.__init__(env)
+        super().__init__(env)
         self.dtype = dtype
         old_space = env.observation_space
         self.observation_space = gym.spaces.Box(
@@ -93,7 +94,7 @@ class BufferWrapper(gym.ObservationWrapper):
 
 class ImageToPytorch(gym.ObservationWrapper):
     def __init__(self, env):
-        super.__init__(env)
+        super().__init__(env)
         old_shape = self.observation_space.shape
         new_shape = (old_shape[-1], old_shape[0], old_shape[1])
         self.observation_space = gym.spaces.Box(
@@ -115,4 +116,4 @@ def make_env(env_name):
     env = ProcessFrame84(env)
     env = ImageToPytorch(env)
     env = BufferWrapper(env, 4)
-    env = ScaledFloatFrame(env)
+    return ScaledFloatFrame(env)

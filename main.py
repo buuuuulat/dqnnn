@@ -12,7 +12,7 @@ import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 
 
-DEFAULT_ENV_NAME = 'PongNoFrameskip-v4'
+DEFAULT_ENV_NAME = 'ALE/PongNoFrameskip-v5'
 MEAN_REWARD_BOUND = 19.0
 
 GAMMA = 0.99
