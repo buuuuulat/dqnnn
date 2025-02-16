@@ -18,11 +18,11 @@ DEFAULT_ENV_NAME = 'ALE/Pong-v5'
 MEAN_REWARD_BOUND = 19.0
 
 GAMMA = 0.99
-BATCH_SIZE = 32
+BATCH_SIZE = 128
 REPLAY_SIZE = 10000
 REPLAY_START_SIZE = 10000
 LEARNING_RATE = 1e-4
-SYNC_TARGET_FRAMES = 10000
+SYNC_TARGET_FRAMES = 1000
 
 EPSILON_DECAY_LAST_FRAME = 150000
 EPSILON_START = 1.0
@@ -98,7 +98,7 @@ class Agent:
         next_state_values = next_state_values.detach()
 
         expected_state_action_values = next_state_values * GAMMA + rewards_v
-        return nn.MSELoss()(state_action_values, expected_state_action_values)
+        return nn.SmoothL1Loss()(state_action_values, expected_state_action_values)
 
 
 if __name__ == '__main__':
@@ -120,7 +120,7 @@ if __name__ == '__main__':
     agent = Agent(env, buffer)
     epsilon = EPSILON_START
 
-    optimizer = optim.Adam(net.parameters(), lr=LEARNING_RATE)
+    optimizer = optim.RMSprop(net.parameters(), lr=LEARNING_RATE, eps=1e-4)
     total_rewards = []
     frame_idx = 0
     ts_frame = 0
